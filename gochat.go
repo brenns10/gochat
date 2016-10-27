@@ -36,6 +36,10 @@ func (cs *ChatServer) Run(addr string) bool {
 	if err != nil {
 		return false
 	}
+
+	broadcastChannel := make(chan map[string]string)
+	go cs.runBroadcaster(broadcastChannel)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -43,33 +47,38 @@ func (cs *ChatServer) Run(addr string) bool {
 			return false
 		}
 		cs.clients = append(cs.clients, conn)
-		go cs.runClient(conn)
+		go cs.runClientListener(conn, broadcastChannel)
 	}
 }
 
 /*
-Broadcast the given message to all connected clients.
+A goroutine which receives messages that need to be broadcasted to all clients.
 */
-func (cs *ChatServer) broadcastToClients(msg map[string]string) {
-	bytes, _ := json.Marshal(msg)
+func (cs *ChatServer) runBroadcaster(input <-chan map[string]string) {
+	for msg := range input {
+		bytes, _ := json.Marshal(msg)
 
-	for _, client := range cs.clients {
-		client.Write(bytes)
-		client.Write([]byte{'\n'})
+		for _, client := range cs.clients {
+			client.Write(bytes)
+			client.Write([]byte{'\n'})
+		}
 	}
 }
 
 /*
 Run a goroutine for a client.
 */
-func (cs *ChatServer) runClient(client net.Conn) {
+func (cs *ChatServer) runClientListener(
+	client net.Conn,
+	broadcaster chan<- map[string]string,
+) {
 	decoder := json.NewDecoder(client)
 	for decoder.More() {
 		m := make(map[string]string)
 		decoder.Decode(&m)
 		fmt.Println("Decoded message", m)
 		if m["cmd"] == "msg" {
-			cs.broadcastToClients(m)
+			broadcaster <- m
 		}
 	}
 }
