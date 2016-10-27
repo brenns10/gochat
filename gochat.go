@@ -78,6 +78,9 @@ func (cs *ChatServer) runClientListener(
 		decoder.Decode(&m)
 		fmt.Println("Decoded message", m)
 		if m["cmd"] == "msg" {
+			// This blocks until the broadcasting goroutine can send the message.
+			// If the server is busy and the client is sending lots of messages,
+			// the socket could fill up. Let's hope that doesn't happen!
 			broadcaster <- m
 		}
 	}
